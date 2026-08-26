@@ -1,13 +1,33 @@
 @echo off
 
-md "package\Fomod"
-md "package\SDK"
+set "ROOT=%~dp0"
+set "SKSE_BUILD_ROOT=%ROOT%build"
+set "COMMON_SOURCE=%SKSE_BUILD_ROOT%\common"
+set "SKSE_SOURCE=%SKSE_BUILD_ROOT%\skse64"
+set "SKSE_COMMON_BUILD=%COMMON_SOURCE%\build"
+set "SKSE_BUILD=%SKSE_SOURCE%\build"
+set "SKSE_EXTERNAL=%SKSE_BUILD_ROOT%\extern"
+set "SKSE64Path=%SKSE_BUILD_ROOT%\skse64-sdk"
 
-cmake --preset vs2022-windows --check-stamp-file "build/CMakeFiles/generate.stamp" -Wno-deprecated || goto :error
+if not exist "%COMMON_SOURCE%\.git" git clone https://github.com/ianpatt/common "%COMMON_SOURCE%" || goto :error
+if not exist "%SKSE_SOURCE%\.git" git clone https://github.com/ianpatt/skse64 "%SKSE_SOURCE%" || goto :error
+
+cmake -B "%SKSE_COMMON_BUILD%" -S "%COMMON_SOURCE%" -G "Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX="%SKSE_EXTERNAL%" || goto :error
+cmake --build "%SKSE_COMMON_BUILD%" --config Release --target install || goto :error
+cmake -B "%SKSE_BUILD%" -S "%SKSE_SOURCE%" -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="%SKSE_EXTERNAL%" -DCMAKE_INSTALL_PREFIX="%SKSE_EXTERNAL%" || goto :error
+cmake --build "%SKSE_BUILD%" --config Release || goto :error
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\prepare_skse_sdk.ps1" -Source "%SKSE_SOURCE%" -Destination "%SKSE64Path%" || goto :error
+
+md "%ROOT%package\Fomod"
+md "%ROOT%package\SDK"
+
+pushd "%ROOT%"
+cmake --preset vs2022-windows -Wno-deprecated || goto :error
 cmake --build build --config Release || goto :error
 cmake --install build --component "SKSEPlugin" --prefix "package/Fomod/SkyrimSE" || goto :error
 
-cmake --preset vs2022-windows-vr --check-stamp-file "buildVR/CMakeFiles/generate.stamp" -Wno-deprecated || goto :error
+cmake --preset vs2022-windows-vr -Wno-deprecated || goto :error
 cmake --build buildVR --target "MCMHelper" --config Release || goto :error
 cmake --install buildVR --component "SKSEPlugin" --prefix "package/Fomod/SkyrimVR" || goto :error
 
@@ -19,15 +39,10 @@ cmake --install build --component "Loose" --prefix "package/Fomod/Loose" || goto
 cmake --install build --component "Data" --prefix "package/Fomod/Data" || goto :error
 cmake --install build --component "SDK" --prefix "package/SDK" || goto :error
 
-pushd package
-pushd Fomod
-7z a -r -t7Z "..\MCM.Helper.7z"
-popd
-pushd SDK
-7z a -r -t7Z "..\MCM.SDK.7z"
-popd
-popd
+powershell -NoProfile -Command "Compress-Archive -Path '%ROOT%package\Fomod\*' -DestinationPath '%ROOT%package\MCM.Helper.zip' -Force" || goto :error
+powershell -NoProfile -Command "Compress-Archive -Path '%ROOT%package\SDK\*' -DestinationPath '%ROOT%package\MCM.SDK.zip' -Force" || goto :error
 
+popd
 goto :EOF
 
 :error

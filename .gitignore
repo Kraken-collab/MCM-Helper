@@ -1,2 +1,7 @@
 package*/
 *.7z
+*.zip
+build/
+buildVR/
+.skse64-sdk/
+.vs/
